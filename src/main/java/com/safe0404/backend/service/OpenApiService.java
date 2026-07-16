@@ -3,7 +3,9 @@ package com.safe0404.backend.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.safe0404.backend.entity.Country;
+import com.safe0404.backend.entity.CountryEnvironment;
 import com.safe0404.backend.entity.SafetyNotice;
+import com.safe0404.backend.repository.CountryEnvironmentRepository;
 import com.safe0404.backend.repository.CountryRepository;
 import com.safe0404.backend.repository.SafetyNoticeRepository;
 import jakarta.annotation.PostConstruct;
@@ -25,6 +27,8 @@ public class OpenApiService {
 
     private final CountryRepository countryRepository;
     private final SafetyNoticeRepository safetyNoticeRepository;
+    private final CountryEnvironmentRepository countryEnvironmentRepository;
+    private final VectorStoreService vectorStoreService;
 
     @Value("${openapi.service.key}")
     private String serviceKey;
@@ -59,6 +63,18 @@ public class OpenApiService {
             mockNotices.add(new SafetyNotice(null, "UA", "여행금지 특별 지침", "1. 현지 대한민국 대사관 당직 연결 요망\n2. 무단 입국 시 여권법 위반으로 형사 처벌 대상이 될 수 있습니다.", "2026-07-17"));
 
             safetyNoticeRepository.saveAll(mockNotices);
+
+            // 종합환경 Mock 데이터 추가
+            List<CountryEnvironment> mockEnvs = new ArrayList<>();
+            mockEnvs.add(new CountryEnvironment("JP", "일본", 99.8, "최고 수준의 안전한 수질 및 보건망. 응급 대응 체계 우수.", 104.5, 2.6, 9.2, "치안 양호. 소매치기 수준의 경범죄 외 전반적 치안 위협 극히 낮음. 단, 지진 자연재해 다발.", "주일본 대사관: +81-3-3452-7611"));
+            mockEnvs.add(new CountryEnvironment("FR", "프랑스", 98.5, "의료 시스템 우수. 주요 거점 병원에 양질의 장비 확보.", 112.3, 7.2, 6.8, "파리 대도시 기차역 인근 강절도 및 소매치기 다발. 야간 으슥한 골목 출입 자제 요망.", "주프랑스 대사관: +33-1-4753-0101"));
+            mockEnvs.add(new CountryEnvironment("PH", "필리핀", 87.2, "주요 거점 사립 병원 양호하나 외곽 시골 지역은 수질 전염병 및 뎅기열 위약.", 125.1, 4.8, 245.0, "남부 민다나오 특별 치안 악화 구역. 이슬람 반군 납치 테러 위협으로 야간 보행 통제.", "주필리핀 대사관: +63-2-8856-7188"));
+            mockEnvs.add(new CountryEnvironment("UA", "우크라이나", 82.0, "전쟁 사태 장기화로 국지적 병원 폭격 파괴 심각. 기본 의약품 및 수술 기자재 부족.", 140.0, 15.0, 65.0, "전역 여행금지 발령. 계엄령 하 치안 통제 불안정. 군사 충돌 및 미사일 공습 진행.", "주폴란드 대외 대피지원팀: +48-22-742-0300"));
+
+            countryEnvironmentRepository.saveAll(mockEnvs);
+            
+            // 데이터 적재가 완료되었으므로 벡터 DB 재빌딩 트리거
+            vectorStoreService.rebuildVectorStore();
         }
     }
 
@@ -74,6 +90,7 @@ public class OpenApiService {
         
         RestTemplate restTemplate = new RestTemplate();
         ObjectMapper objectMapper = new ObjectMapper();
+        boolean updated = false;
 
         // 1. 여행경보 V3 API 연동
         try {
@@ -93,7 +110,8 @@ public class OpenApiService {
 
             System.out.println("[디버그] 여행경보 itemNode IsArray: " + itemNode.isArray() + ", Size: " + itemNode.size());
 
-            if (itemNode.isArray()) {
+            if (itemNode.isArray() && itemNode.size() > 0) {
+                updated = true;
                 for (JsonNode node : itemNode) {
                     String isoCode = node.path("iso_code").asText("");
                     if (isoCode.isEmpty()) continue;
@@ -161,7 +179,8 @@ public class OpenApiService {
             JsonNode dataNode = root.path("response").path("body").path("items").path("item");
             System.out.println("[디버그] 안전공지 dataNode IsArray: " + dataNode.isArray() + ", Size: " + dataNode.size());
 
-            if (dataNode.isArray()) {
+            if (dataNode.isArray() && dataNode.size() > 0) {
+                updated = true;
                 for (JsonNode node : dataNode) {
                     String code = node.path("country_iso_alp2").asText("");
                     if (code.isEmpty()) continue;
@@ -192,6 +211,12 @@ public class OpenApiService {
         } catch (Exception e) {
             System.err.println("[오류] 안전공지 API 연동 실패: " + e.getMessage());
             e.printStackTrace();
+        }
+
+        // 실제 수집 데이터 적재 성공 시 Vector DB 리인덱싱 수행
+        if (updated) {
+            System.out.println("[시스템] 데이터 적재 완료에 따른 실시간 벡터 DB 재색인을 개시합니다.");
+            vectorStoreService.rebuildVectorStore();
         }
     }
 

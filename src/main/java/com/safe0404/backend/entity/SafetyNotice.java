@@ -21,6 +21,7 @@ public class SafetyNotice {
     private Long id; // 식별자
     private String countryCode; // 국가코드
     private String title; // 공지제목
+    @jakarta.persistence.Column(columnDefinition = "TEXT")
     private String content; // 공지내용
     private String writtenDate; // 작성일자
 }

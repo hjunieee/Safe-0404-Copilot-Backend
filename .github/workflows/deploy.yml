@@ -27,7 +27,7 @@ jobs:
         run: |
           docker run -d \
             --name safe0404-backend \
-            -p 8080:8080 \
+            -p 8081:8080 \
             -e LITELLM_API_KEY="${{ secrets.LITELLM_API_KEY }}" \
             -e SPRING_PROFILES_ACTIVE=prod \
             --restart always \

@@ -86,9 +86,12 @@ public class OpenApiService {
                     .toUriString();
 
             ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+            System.out.println("[디버그] 여행경보 API 응답 원본: " + (response.getBody() != null ? response.getBody().substring(0, Math.min(1000, response.getBody().length())) : "null"));
             JsonNode root = objectMapper.readTree(response.getBody());
             // V3 스키마: body -> items -> item
             JsonNode itemNode = root.path("body").path("items").path("item");
+
+            System.out.println("[디버그] 여행경보 itemNode IsArray: " + itemNode.isArray() + ", Size: " + itemNode.size());
 
             if (itemNode.isArray()) {
                 for (JsonNode node : itemNode) {
@@ -152,9 +155,11 @@ public class OpenApiService {
                     .toUriString();
 
             ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+            System.out.println("[디버그] 안전공지 API 응답 원본: " + (response.getBody() != null ? response.getBody().substring(0, Math.min(1000, response.getBody().length())) : "null"));
             JsonNode root = objectMapper.readTree(response.getBody());
             // V6 스키마: data 바로 밑에 배열 전개
             JsonNode dataNode = root.path("data");
+            System.out.println("[디버그] 안전공지 dataNode IsArray: " + dataNode.isArray() + ", Size: " + dataNode.size());
 
             if (dataNode.isArray()) {
                 for (JsonNode node : dataNode) {

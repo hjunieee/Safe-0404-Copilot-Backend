@@ -1,5 +1,6 @@
 package com.safe0404.backend.controller;
 
+import com.safe0404.backend.dto.ChatRequestDto;
 import com.safe0404.backend.service.RagService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,9 +23,9 @@ public class ChatController {
     // AI RAG 대화 수행
     @Operation(summary = "0404 AI RAG 챗봇 질의", description = "외교부 지식 베이스 및 실시간 사건사고 데이터를 연동하여, 사용자의 비상 질문에 신뢰성 높은 마크다운 형식의 조력 답변을 생성합니다.")
     @PostMapping("/chat")
-    public ResponseEntity<Map<String, String>> askCopilot(@RequestBody Map<String, String> request) {
-        String message = request.get("message");
-        String countryCode = request.get("countryCode");
+    public ResponseEntity<Map<String, String>> askCopilot(@RequestBody ChatRequestDto request) {
+        String message = request.getMessage();
+        String countryCode = request.getCountryCode();
         
         if (message == null || message.trim().isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "message 필드는 비워둘 수 없습니다."));

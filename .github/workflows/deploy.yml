@@ -1,8 +1,7 @@
 name: Safe 0404 Backend CI/CD Pipeline
 
 on:
-  push:
-    branches: [ "main" ]
+  workflow_dispatch: # GitHub Actions 페이지에서 수동으로 실행
 
 jobs:
   build-and-deploy:

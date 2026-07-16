@@ -72,7 +72,7 @@ public class OpenApiService {
         RestTemplate restTemplate = new RestTemplate();
         ObjectMapper objectMapper = new ObjectMapper();
 
-        // 1. 여행경보 API 연동
+        // 1. 여행경보 V3 API 연동
         try {
             String url = UriComponentsBuilder.fromUriString(warningUrl)
                     .queryParam("serviceKey", serviceKey)
@@ -84,16 +84,38 @@ public class OpenApiService {
 
             ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
             JsonNode root = objectMapper.readTree(response.getBody());
-            JsonNode dataNode = root.path("data");
+            // V3 스키마: body -> items -> item
+            JsonNode itemNode = root.path("body").path("items").path("item");
 
-            if (dataNode.isArray()) {
-                for (JsonNode node : dataNode) {
+            if (itemNode.isArray()) {
+                for (JsonNode node : itemNode) {
+                    String isoCode = node.path("iso_code").asText("");
+                    if (isoCode.isEmpty()) continue;
+
                     String code = node.path("country_iso_alp2").asText("");
+                    if (code.isEmpty()) {
+                        code = convertIso3ToIso2(isoCode);
+                    }
                     if (code.isEmpty()) continue;
 
-                    String name = node.path("country_nm").asText("");
-                    Integer level = node.path("alarm_lvl").asInt(0);
-                    String warningText = node.path("alarm_lvl_nm").asText("");
+                    String name = node.path("country_name").asText("");
+                    
+                    // 각 항목의 노트를 대조하여 경보레벨 1~4 판별
+                    int level = 0;
+                    String warningText = "경보 없음";
+                    if (!node.path("ban_note").asText("").isEmpty() || !node.path("ban_yna").asText("").isEmpty()) {
+                        level = 4;
+                        warningText = "여행금지 (4단계)";
+                    } else if (!node.path("limita").asText("").isEmpty() || !node.path("limita_note").asText("").isEmpty()) {
+                        level = 3;
+                        warningText = "철수권고 (3단계)";
+                    } else if (!node.path("control").asText("").isEmpty() || !node.path("control_note").asText("").isEmpty()) {
+                        level = 2;
+                        warningText = "여행자제 (2단계)";
+                    } else if (!node.path("attention").asText("").isEmpty() || !node.path("attention_note").asText("").isEmpty()) {
+                        level = 1;
+                        warningText = "여행유의 (1단계)";
+                    }
 
                     Country country = countryRepository.findById(code.toUpperCase())
                             .orElse(new Country());
@@ -116,7 +138,7 @@ public class OpenApiService {
             e.printStackTrace();
         }
 
-        // 2. 안전공지 API 연동
+        // 2. 안전공지 V6 API 연동
         try {
             String url = UriComponentsBuilder.fromUriString(noticeUrl)
                     .queryParam("serviceKey", serviceKey)
@@ -128,6 +150,7 @@ public class OpenApiService {
 
             ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
             JsonNode root = objectMapper.readTree(response.getBody());
+            // V6 스키마: data 바로 밑에 배열 전개
             JsonNode dataNode = root.path("data");
 
             if (dataNode.isArray()) {
@@ -136,7 +159,8 @@ public class OpenApiService {
                     if (code.isEmpty()) continue;
 
                     String title = node.path("title").asText("");
-                    String content = node.path("txt_origin").asText("");
+                    // V2의 txt_origin 대신 V6의 txt_origin_cn 사용
+                    String content = node.path("txt_origin_cn").asText("");
                     String date = node.path("wrt_dt").asText("");
 
                     List<SafetyNotice> existing = safetyNoticeRepository.findByCountryCode(code.toUpperCase());
@@ -160,6 +184,26 @@ public class OpenApiService {
         } catch (Exception e) {
             System.err.println("[오류] 안전공지 API 연동 실패: " + e.getMessage());
             e.printStackTrace();
+        }
+    }
+
+    // 3자리 ISO 코드를 2자리 국가코드로 변환하는 헬퍼
+    private String convertIso3ToIso2(String iso3) {
+        if (iso3 == null || iso3.isEmpty()) return "";
+        switch (iso3.toUpperCase()) {
+            case "JPN": return "JP";
+            case "FRA": return "FR";
+            case "PHL": return "PH";
+            case "UKR": return "UA";
+            case "USA": return "US";
+            case "CHN": return "CN";
+            case "GBR": return "GB";
+            case "DEU": return "DE";
+            case "ITA": return "IT";
+            case "VNM": return "VN";
+            case "THA": return "TH";
+            default:
+                return iso3.substring(0, Math.min(2, iso3.length())).toUpperCase();
         }
     }
 }

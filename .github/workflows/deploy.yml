@@ -5,8 +5,8 @@ on:
 
 jobs:
   build-and-deploy:
-    # 서버에 설치된 self-hosted runner 위에서 직접 실행
-    runs-on: self-hosted
+    # safe0404 라벨이 붙은 runner에서만 실행 (다른 프로젝트 runner와 격리)
+    runs-on: [self-hosted, safe0404]
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3

@@ -65,7 +65,10 @@ public class OpenApiService {
     // 30분 주기 데이터 실시간 갱신 배치
     @Scheduled(cron = "0 0/30 * * * ?")
     public void syncOpenApiData() {
+        System.out.println("[시스템] 데이터 동기화 배치를 시작합니다. 현재 로드된 API Key: [" + serviceKey + "]");
+        
         if ("your_actual_service_key_here".equals(serviceKey) || serviceKey.isEmpty()) {
+            System.err.println("[경고] API 인증키가 감지되지 않았거나 기본 템플릿 값입니다. .env 설정을 확인해 주세요. 동기화를 실행하지 않고 조기 종료합니다.");
             return;
         }
         

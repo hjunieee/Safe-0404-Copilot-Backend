@@ -1,5 +1,7 @@
 package com.safe0404.backend.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.safe0404.backend.entity.Country;
 import com.safe0404.backend.entity.SafetyNotice;
 import com.safe0404.backend.repository.CountryRepository;
@@ -7,9 +9,11 @@ import com.safe0404.backend.repository.SafetyNoticeRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +28,12 @@ public class OpenApiService {
 
     @Value("${openapi.service.key}")
     private String serviceKey;
+
+    @Value("${openapi.url.warning}")
+    private String warningUrl;
+
+    @Value("${openapi.url.notice}")
+    private String noticeUrl;
 
     // 초기 Mock 데이터 적재
     @PostConstruct
@@ -56,15 +66,98 @@ public class OpenApiService {
     @Scheduled(cron = "0 0/30 * * * ?")
     public void syncOpenApiData() {
         if ("your_actual_service_key_here".equals(serviceKey) || serviceKey.isEmpty()) {
-            // API Key 미주입 시 패스
             return;
         }
         
+        RestTemplate restTemplate = new RestTemplate();
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        // 1. 여행경보 API 연동
         try {
-            RestTemplate restTemplate = new RestTemplate();
-            // TODO: 실제 외교부 OpenAPI 호출 및 DB 파싱 적재 파이프라인 연동 예정 (스프린트 2 진입부)
+            String url = UriComponentsBuilder.fromUriString(warningUrl)
+                    .queryParam("serviceKey", serviceKey)
+                    .queryParam("numOfRows", "100")
+                    .queryParam("pageNo", "1")
+                    .queryParam("returnType", "JSON")
+                    .build(true) // 인코딩 자동 처리 방지
+                    .toUriString();
+
+            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+            JsonNode root = objectMapper.readTree(response.getBody());
+            JsonNode dataNode = root.path("data");
+
+            if (dataNode.isArray()) {
+                for (JsonNode node : dataNode) {
+                    String code = node.path("country_iso_alp2").asText("");
+                    if (code.isEmpty()) continue;
+
+                    String name = node.path("country_nm").asText("");
+                    Integer level = node.path("alarm_lvl").asInt(0);
+                    String warningText = node.path("alarm_lvl_nm").asText("");
+
+                    Country country = countryRepository.findById(code.toUpperCase())
+                            .orElse(new Country());
+
+                    country.setCode(code.toUpperCase());
+                    country.setName(name);
+                    country.setWarningLevel(level);
+                    country.setWarningText(warningText);
+
+                    // 비상번호 디폴트 매핑
+                    if (country.getPolice() == null) country.setPolice("112");
+                    if (country.getAmbulance() == null) country.setAmbulance("119");
+                    if (country.getEmbassy() == null) country.setEmbassy("미등록");
+
+                    countryRepository.save(country);
+                }
+            }
         } catch (Exception e) {
-            // 통신 예외 발생 시 로깅
+            // 통신 에러 로그 생략
+        }
+
+        // 2. 안전공지 API 연동
+        try {
+            String url = UriComponentsBuilder.fromUriString(noticeUrl)
+                    .queryParam("serviceKey", serviceKey)
+                    .queryParam("numOfRows", "30")
+                    .queryParam("pageNo", "1")
+                    .queryParam("returnType", "JSON")
+                    .build(true)
+                    .toUriString();
+
+            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+            JsonNode root = objectMapper.readTree(response.getBody());
+            JsonNode dataNode = root.path("data");
+
+            if (dataNode.isArray()) {
+                for (JsonNode node : dataNode) {
+                    String code = node.path("country_iso_alp2").asText("");
+                    if (code.isEmpty()) continue;
+
+                    String title = node.path("title").asText("");
+                    String content = node.path("txt_origin").asText("");
+                    String date = node.path("wrt_dt").asText("");
+
+                    List<SafetyNotice> existing = safetyNoticeRepository.findByCountryCode(code.toUpperCase());
+                    boolean duplicate = existing.stream().anyMatch(n -> n.getTitle().equals(title));
+
+                    if (!duplicate) {
+                        SafetyNotice notice = new SafetyNotice();
+                        notice.setCountryCode(code.toUpperCase());
+                        notice.setTitle(title);
+                        notice.setContent(content);
+                        notice.setWrittenDate(date);
+                        safetyNoticeRepository.save(notice);
+
+                        countryRepository.findById(code.toUpperCase()).ifPresent(c -> {
+                            c.setRecentNotice(title);
+                            countryRepository.save(c);
+                        });
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // 통신 에러 로그 생략
         }
     }
 }

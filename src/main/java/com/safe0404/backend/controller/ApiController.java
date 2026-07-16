@@ -4,6 +4,7 @@ import com.safe0404.backend.entity.Country;
 import com.safe0404.backend.entity.SafetyNotice;
 import com.safe0404.backend.repository.CountryRepository;
 import com.safe0404.backend.repository.SafetyNoticeRepository;
+import com.safe0404.backend.service.OpenApiService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,6 +20,14 @@ public class ApiController {
 
     private final CountryRepository countryRepository;
     private final SafetyNoticeRepository safetyNoticeRepository;
+    private final OpenApiService openApiService;
+
+    // 수동 데이터 동기화 수행
+    @GetMapping("/sync")
+    public ResponseEntity<String> forceSyncData() {
+        openApiService.syncOpenApiData();
+        return ResponseEntity.ok("외교부 공공 API 데이터 동기화 완료!");
+    }
 
     // 전체 국가 목록 조회
     @GetMapping("/countries")

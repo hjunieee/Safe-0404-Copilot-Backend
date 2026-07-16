@@ -112,7 +112,8 @@ public class OpenApiService {
                 }
             }
         } catch (Exception e) {
-            // 통신 에러 로그 생략
+            System.err.println("[오류] 여행경보 API 연동 실패: " + e.getMessage());
+            e.printStackTrace();
         }
 
         // 2. 안전공지 API 연동
@@ -157,7 +158,8 @@ public class OpenApiService {
                 }
             }
         } catch (Exception e) {
-            // 통신 에러 로그 생략
+            System.err.println("[오류] 안전공지 API 연동 실패: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 }
